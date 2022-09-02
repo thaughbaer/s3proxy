@@ -34,6 +34,8 @@ final class AwsHttpHeaders {
     static final String METADATA_DIRECTIVE = "x-amz-metadata-directive";
     static final String REQUEST_ID = "x-amz-request-id";
     static final String STORAGE_CLASS = "x-amz-storage-class";
+    static final String API_VERSION = "x-amz-api-version";
+    static final String SERVER_SIDE_ENCRYPTION = "x-amz-server-side-encryption";
 
     private AwsHttpHeaders() {
         throw new AssertionError("intentionally unimplemented");
