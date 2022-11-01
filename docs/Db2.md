@@ -28,9 +28,9 @@ kubectl create secret generic azure-<accountname>-secret --from-literal=azuresto
 ```
 
 Update the deployment yaml with:
--The storage account secret name ( multiple places )
--The endpoint for your storage account	
--If you are using a private registry the image
+- The storage account secret name ( multiple places )
+- The endpoint for your storage account	
+- If you are using a private registry the image
 
 Create the deployment:
 ```
