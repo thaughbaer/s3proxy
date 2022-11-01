@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3proxy
+  namespace: s3proxy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: s3proxy
+  template:
+    metadata:
+      labels:
+        app: s3proxy
+    spec:
+      containers:
+      - command:
+        - /bin/bash
+        - -cx
+        - |
+          #!/bin/bash
+          set -euo pipefail
+
+          SERVICE_NAME="s3proxy"
+          NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+
+          ROOTCA_KEY_DIR=/mnt/certs/rootca
+          CERT_DIR=/opt/s3proxy/certs
+
+          mkdir -p ${CERT_DIR}
+
+          if [ ! -f ${ROOTCA_KEY_DIR}/rootCA.pem ]; then
+              ROOTCA_KEY_DIR=${CERT_DIR}
+              openssl genrsa -out ${ROOTCA_KEY_DIR}/rootCA.key 4096
+              openssl req -x509 -new -nodes -key ${ROOTCA_KEY_DIR}/rootCA.key -sha256 -days 1024 -out ${ROOTCA_KEY_DIR}/rootCA.pem -subj "/C=CA/ST=Hampshire/L=Portsmouth/O=IBM/OU=${SERVICE_NAME}/CN=ibm.com"
+          else
+              cp ${ROOTCA_KEY_DIR}/rootCA.* ${CERT_DIR}
+              ROOTCA_KEY_DIR=${CERT_DIR}
+          fi
+
+          openssl genrsa -out ${CERT_DIR}/tls.key 2048
+          openssl req -new -sha256 -key ${CERT_DIR}/tls.key -out ${CERT_DIR}/tls.csr -subj "/C=CA/ST=Hampshire/L=Portsmouth/O=IBM/OU=${SERVICE_NAME}/CN=${SERVICE_NAME}.${NAMESPACE}.svc.cluster.local" 2>&1
+          openssl x509 -req -in ${CERT_DIR}/tls.csr -CA ${ROOTCA_KEY_DIR}/rootCA.pem -CAkey ${ROOTCA_KEY_DIR}/rootCA.key -CAcreateserial -out ${CERT_DIR}/tls.crt -days 512 -sha256
+
+          if [ -f ${CERT_DIR}/keystore.jks ]; then
+              rm -f ${CERT_DIR}/keystore.jks
+          fi
+          keytool -import -keystore ${CERT_DIR}/keystore.jks -trustcacerts -alias rootCA -file ${ROOTCA_KEY_DIR}/rootCA.pem -storepass "${S3PROXY_CREDENTIAL}" -noprompt
+          openssl pkcs12 -export -out ${CERT_DIR}/${SERVICE_NAME}.p12 -in ${CERT_DIR}/tls.crt -inkey ${CERT_DIR}/tls.key -name ${SERVICE_NAME} -password "pass:${S3PROXY_CREDENTIAL}"
+          keytool -importkeystore -deststorepass "${S3PROXY_CREDENTIAL}" -destkeypass "${S3PROXY_CREDENTIAL}" -destkeystore ${CERT_DIR}/keystore.jks -srckeystore  ${CERT_DIR}/${SERVICE_NAME}.p12 -srcstoretype PKCS12 -srcstorepass "${S3PROXY_CREDENTIAL}" -alias ${SERVICE_NAME}
+
+          exec /opt/s3proxy/run-docker-container.sh
+        env:
+        - name: LOG_LEVEL
+          value: info
+        - name: JCLOUDS_PROVIDER
+          value: azureblob
+        - name: JCLOUDS_IDENTITY
+          valueFrom:
+            secretKeyRef:
+              key: azurestorageaccountname
+              name: azure-dtaeunndevblbedw02-secret
+        - name: JCLOUDS_CREDENTIAL
+          valueFrom:
+            secretKeyRef:
+              key: azurestorageaccountkey
+              name: azure-dtaeunndevblbedw02-secret
+        - name: JCLOUDS_ENDPOINT
+          value: https://dtaeunndevblbedw02.blob.core.windows.net
+        - name: S3PROXY_AUTHORIZATION
+          value: aws-v2-or-v4
+        - name: S3PROXY_ENDPOINT
+          value: http://0.0.0.0:8080
+        - name: S3PROXY_SECURE_ENDPOINT
+          value: https://0.0.0.0:8443
+        - name: S3PROXY_IDENTITY
+          valueFrom:
+            secretKeyRef:
+              key: azurestorageaccountname
+              name: azure-dtaeunndevblbedw02-secret
+        - name: S3PROXY_CREDENTIAL
+          valueFrom:
+            secretKeyRef:
+              key: azurestorageaccountkey
+              name: azure-dtaeunndevblbedw02-secret
+        image: dtaeunndevacrgen01.azurecr.io/thaughbaer/s3proxy
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          successThreshold: 1
+          tcpSocket:
+            port: 8443
+          timeoutSeconds: 1
+        name: s3proxy
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 8443
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsUser: 1000
+        volumeMounts:
+        - mountPath: /mnt/certs/rootca
+          name: rootca
+          readOnly: true
+        - mountPath: /opt/s3proxy/certs
+          name: certs
+      volumes:
+      - emptyDir: {}
+        name: certs
+      - name: rootca
+        projected:
+          defaultMode: 420
+          sources:
+          - secret:
+              name: s3proxy-rootca-key
+              optional: true
+          - configMap:
+              name: s3proxy-rootca-crt
+              optional: true
