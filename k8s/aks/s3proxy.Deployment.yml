@@ -59,14 +59,14 @@ spec:
           valueFrom:
             secretKeyRef:
               key: azurestorageaccountname
-              name: azure-dtaeunndevblbedw02-secret
+              name: azure-storageaccount-secret
         - name: JCLOUDS_CREDENTIAL
           valueFrom:
             secretKeyRef:
               key: azurestorageaccountkey
-              name: azure-dtaeunndevblbedw02-secret
+              name: azure-storageaccount-secret
         - name: JCLOUDS_ENDPOINT
-          value: https://dtaeunndevblbedw02.blob.core.windows.net
+          value: https://storageaccount.blob.core.windows.net
         - name: S3PROXY_AUTHORIZATION
           value: aws-v2-or-v4
         - name: S3PROXY_ENDPOINT
@@ -77,13 +77,13 @@ spec:
           valueFrom:
             secretKeyRef:
               key: azurestorageaccountname
-              name: azure-dtaeunndevblbedw02-secret
+              name: azure-storageaccount-secret
         - name: S3PROXY_CREDENTIAL
           valueFrom:
             secretKeyRef:
               key: azurestorageaccountkey
-              name: azure-dtaeunndevblbedw02-secret
-        image: dtaeunndevacrgen01.azurecr.io/thaughbaer/s3proxy
+              name: azure-storageaccount-secret
+        image: quay.io/thaughbaer/s3proxy
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
